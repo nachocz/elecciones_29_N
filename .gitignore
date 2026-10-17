@@ -1,0 +1,11 @@
+# Notas de trabajo con las instrucciones del proyecto (no forman parte del sitio)
+prompt*.md
+
+# Ficheros generados
+_site/
+web/abrir_en_local.html
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
