@@ -54,7 +54,7 @@
   const S = {
     answers: {}, skipped: {}, revealed: {}, region: 'ES', mode: 'rapido', idx: 0,
     view: 'cuestionario', example: false, deepExample: false, mapY: 't', relWeighted: true, relParty: null, relDim: 'all',
-    relArea: 'all', detailCat: 'all', pasteOpen: false, focusId: null, dmapX: null, dmapY: null
+    relArea: 'all', detailCat: 'all', pasteOpen: false, focusId: null, dmapX: null, dmapY: null, introOpen: null
   };
   function load() {
     try {
@@ -427,11 +427,41 @@
     if (S.idx < 0) S.idx = 0;
     const q = list[S.idx];
     const answered = list.filter((x) => S.answers[x.id]).length;
-    $('#v-cuestionario').innerHTML =
+    $('#v-cuestionario').innerHTML = introPanel() +
       '<div class="quiz">' +
         '<aside class="side">' + settingsPanel(list, answered) + indexPanel(list) + '</aside>' +
         ballot(q, list) +
       '</div>';
+  }
+
+  /* Presentación de la portada: qué ofrece la herramienta. Abierta hasta la primera respuesta;
+     después queda en una línea que se puede desplegar. */
+  function introPanel() {
+    const nAll = Object.keys(S.answers).length;
+    const open = S.introOpen === null ? nAll === 0 : S.introOpen;
+    if (!open) {
+      return '<div class="intro-mini"><p><strong>Cotejo 29-N</strong> compara tus opiniones con las candidaturas del 29 de noviembre y con su historial.</p>' +
+        '<button type="button" class="btn ghost small" data-action="intro-open" id="btn-intro" aria-expanded="false">Qué puedes hacer aquí</button></div>';
+    }
+    const nCases = Object.values(D.reliability).reduce((a, r) => a + r.cases.length, 0);
+    const item = (k, d, btn) => '<li class="intro-item"><p class="intro-k">' + k + '</p><p class="intro-d">' + d + '</p>' + btn + '</li>';
+    const go = (v, l) => '<button type="button" class="intro-go" data-action="intro-go" data-v="' + v + '">' + l + ' →</button>';
+    const tab = (v, l) => '<a class="intro-go" href="#' + v + '" data-view-link="' + v + '">' + l + ' →</a>';
+    return '<section class="panel intro" aria-labelledby="h-intro">' +
+      '<div class="intro-top"><div class="intro-txt">' +
+        '<h2 class="h-l" id="h-intro">Compara tus ideas con las de cada candidatura</h2>' +
+        '<p class="intro-lead">Responde a preguntas sobre medidas concretas y sobre grandes cuestiones de fondo. Verás qué candidaturas se parecen más a ti y si cumplen lo que dicen. Cada dato enlaza a su fuente.</p></div>' +
+        (nAll ? '<button type="button" class="btn ghost small" data-action="intro-close" id="btn-intro-close" aria-expanded="true">Ocultar</button>' : '') +
+      '</div>' +
+      '<ul class="intro-list">' +
+        item('Medidas concretas', D.questions.filter((x) => x.core).length + ' preguntas rápidas o ' + D.questions.length + ' completas: vivienda, impuestos, inmigración, territorio, exterior…', go('rapido', 'Empezar')) +
+        item('Ejes de fondo', DQ.length + ' preguntas sobre sistema económico, religión, islam, nación o geopolítica, frente a la valoración de 609 politólogos.', go('fondo', 'Responder')) +
+        item('Tus resultados', 'Afinidad con cada candidatura, por bloques y en un mapa, y en qué coincides y en qué no.', tab('resultados', nAll ? 'Ver resultados' : 'Ver un ejemplo')) +
+        item('Historial y fiabilidad', nCases + ' casos documentados: si cumplen lo que prometen y si votan lo que dicen.', tab('fiabilidad', 'Consultar')) +
+      '</ul>' +
+      '<p class="intro-foot">Tus respuestas se guardan solo en este navegador · Afinidad no es recomendación de voto · ' +
+        '<a href="#partidos" data-view-link="partidos">Fichas de los partidos</a> · <a href="#metodo" data-view-link="metodo">Método y ' + Object.keys(D.sources).length + ' fuentes</a></p>' +
+    '</section>';
   }
 
   function settingsPanel(list, answered) {
@@ -541,6 +571,7 @@
       '<footer class="ballot-nav">' +
         '<button type="button" class="btn" data-action="prev" id="btn-prev"' + (i === 0 ? ' disabled' : '') + '>← Anterior</button>' +
         '<span class="kbd-hint">Teclado: ' + (isChoice ? '1–' + q.options.length + ' elige' : '1–5 responde') + ' · ← → navega</span>' +
+        '<span class="nav-count">' + (i + 1) + ' de ' + list.length + '</span>' +
         '<button type="button" class="btn primary" data-action="next" id="btn-next">' + (last ? (S.mode === 'fondo' ? 'Ver mis ejes de fondo' : 'Ver resultados') : 'Siguiente →') + '</button>' +
       '</footer>' +
     '</article>';
@@ -1480,7 +1511,18 @@
         render();
         break;
       case 'reveal': S.revealed[q.id] = true; render(); break;
-      case 'prev': if (S.idx > 0) { S.idx--; S.focusId = 'btn-prev'; render(); } break;
+      case 'prev': if (S.idx > 0) { S.idx--; S.focusId = 'btn-prev'; render(); scrollBallot(); } break;
+      case 'intro-open': S.introOpen = true; S.focusId = 'btn-intro-close'; render(); break;
+      case 'intro-close': S.introOpen = false; S.focusId = 'btn-intro'; render(); break;
+      case 'intro-go': {
+        S.mode = MODES.includes(t.dataset.v) ? t.dataset.v : 'rapido';
+        const nl = qList();
+        S.idx = Math.max(0, nl.findIndex((x) => !S.answers[x.id]));
+        S.focusId = nl[S.idx] && nl[S.idx].type === 'choice' ? 'copt-0' : 'opt-0';
+        render();
+        scrollBallot(true);
+        break;
+      }
       case 'next':
         if (S.idx < list.length - 1) { S.idx++; S.focusId = 'btn-next'; render(); scrollBallot(); }
         else setView(S.mode === 'fondo' ? 'ejes' : 'resultados');
@@ -1596,10 +1638,10 @@
       render();
       ev.preventDefault();
     } else if (ev.key === 'ArrowRight' && !ev.target.closest('[role="radiogroup"]')) {
-      if (S.idx < list.length - 1) { S.idx++; S.focusId = 'btn-next'; render(); }
+      if (S.idx < list.length - 1) { S.idx++; S.focusId = 'btn-next'; render(); scrollBallot(); }
       ev.preventDefault();
     } else if (ev.key === 'ArrowLeft' && !ev.target.closest('[role="radiogroup"]')) {
-      if (S.idx > 0) { S.idx--; S.focusId = 'btn-prev'; render(); }
+      if (S.idx > 0) { S.idx--; S.focusId = 'btn-prev'; render(); scrollBallot(); }
       ev.preventDefault();
     }
   });
@@ -1635,11 +1677,11 @@
     resizeT = setTimeout(() => { hideTip(); hydrate(); }, 120);
   });
 
-  function scrollBallot() {
+  function scrollBallot(force) {
     const b = $('.ballot');
     if (!b) return;
     const r = b.getBoundingClientRect();
-    if (r.top < 0 || r.top > window.innerHeight * 0.6) b.scrollIntoView({ block: 'start', behavior: 'auto' });
+    if (force || r.top < 0 || r.top > window.innerHeight * 0.6) b.scrollIntoView({ block: 'start', behavior: 'auto' });
   }
   function scrollToId(id) {
     const el = document.getElementById(id);
